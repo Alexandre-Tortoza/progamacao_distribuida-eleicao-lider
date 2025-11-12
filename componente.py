@@ -1,29 +1,25 @@
 #!/usr/bin/env python3
 
-# Componentes Basico
-# EP - PUCPR
-# Prof. Luiz Lima Jr.
-
 from pika import BlockingConnection
 from sys import argv
 from enum import Enum
 
-if len(argv) < 2:
-    print(f"USO: {argv[0]} <id> [<v1> <v2> ...]")
+if len(argv) < 4:
+    print(f"USO: {argv[0]} <id> <vizinho> <valor>")
     exit(1)
 
 Estado = Enum('Estado', ['OCIOSO', 'INICIADOR'])
 
 idx = argv[1]
-Nx = argv[2:]
+vizinho = argv[2]
+valor = argv[3]
 estado = Estado.OCIOSO
 
 print("meu id =", idx)
-print("meus vizinhos =", Nx)
+print("meu vizinho =", vizinho)
+print("meu valor =", valor)
 
-from pika import ConnectionParameters
-
-conexao = BlockingConnection(ConnectionParameters('localhost'))
+conexao = BlockingConnection()
 canal = conexao.channel()
 
 canal.queue_declare(queue=idx, auto_delete=True)
@@ -36,15 +32,24 @@ def envia(msg, dests, canal):
                             body=idx + ":" + msg)
 
 def recebendo(msg, origem, canal):
-    # implemente aqui o algoritmo distribuido
     print(f"{msg} recebida de {origem}")
+    if (int(msg) == int(valor)):
+        print(f"Eu sou o lider com o valor: {valor}")
+    else:
+        if (int(msg) < int(valor)):
+            envia(msg, vizinho, canal)
+            print(f"Enviando {msg} para {vizinho}")
+        else:
+            envia(valor, vizinho, canal)
+            print(f"Enviando {valor} para {vizinho}")
 
 def espontaneamente(msg, canal):
-    # implemente aqui o algoritmo distribuido
     global estado
     estado = Estado.INICIADOR
-def callback(ch, method, properties, body):
-    m = body.decode().split(":")
+    envia(valor, vizinho, canal)
+
+def callback(canal, metodo,  props, msg):
+    m = msg.decode().split(":")
     if len(m) < 2:
         # nao tem origem
         msg = m[0]
@@ -53,10 +58,8 @@ def callback(ch, method, properties, body):
         msg = m[1]
         origem = m[0]
 
-    if origem.upper() == "STARTER":
-        espontaneamente(msg, ch)
-    else:
-        recebendo(msg, origem, ch)
+    if origem.upper()=="STARTER":
+        espontaneamente(msg, canal)
     else:
         recebendo(msg, origem, canal)
 
